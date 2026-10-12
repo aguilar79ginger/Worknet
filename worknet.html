@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>WorkNet – Demo interactiva</title>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@300;400;600;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/worknet.css">
+</head>
+<body>
+<header class="top"><button class="brand" data-act="go" data-id="home" aria-label="Ir al inicio"><span class="lg"><img id="hl" alt=""></span>WorkNet</button><nav id="nav" aria-label="Principal"></nav></header>
+<main id="app"></main>
+<footer>WorkNet · Demo del proyecto tecnológico · INSAL · Los datos son de ejemplo y se guardan solo en tu navegador. <button class="link" data-act="reset">Restablecer demo</button></footer>
+<div class="modal" id="modal" hidden><div class="box" id="box" role="dialog" aria-modal="true"></div></div>
+<div id="toast" role="status" aria-live="polite"></div>
+<script>
+const LOGO='img/logo.png';
+const AREAS=['Tecnología','Administración','Comercio','Salud','Educación'],LOCS=['San Salvador','Soyapango','Santa Tecla','San Miguel'],EXPS=['Sin experiencia','1 año','2 años o más'],NIVS=['Bachillerato','Técnico','Universitario'];
+const J=(id,cid,title,area,loc,exp,nivel,desc,req)=>({id,cid,title,area,loc,exp,nivel,desc,req,on:true,t:Date.now()-(+id.slice(1))*864e5});
+const seed=()=>({users:[{id:'u0',name:'Ana Demo',email:'demo@usuario.com',pass:'1234',profile:{skills:'Atención al cliente, Excel, redes básicas',exp:'1 año',nivel:'Técnico',area:'Tecnología'},favs:[]}],
+companies:[{id:'c0',name:'Empresa Demo',email:'demo@empresa.com',pass:'1234'},{id:'c1',name:'Conecta S.A.',email:'c1@x.com',pass:'x'},{id:'c2',name:'Colegio Horizonte',email:'c2@x.com',pass:'x'}],
+jobs:[J('j1','c0','Soporte técnico','Tecnología','San Salvador','1 año','Técnico','Atención de equipos y usuarios en oficinas.','Hardware, redes básicas y buen trato.'),
+J('j2','c0','Desarrollador web junior','Tecnología','Soyapango','Sin experiencia','Bachillerato','Apoyo en el desarrollo de sitios web internos.','HTML, CSS y JavaScript básicos.'),
+J('j3','c0','Asistente administrativo','Administración','Santa Tecla','1 año','Bachillerato','Archivo, atención telefónica y control de agenda.','Excel básico y orden.'),
+J('j4','c1','Técnico de redes','Tecnología','San Salvador','2 años o más','Técnico','Instalación y mantenimiento de redes de datos.','Cableado, routers y switches.'),
+J('j5','c1','Vendedor de mostrador','Comercio','San Miguel','Sin experiencia','Bachillerato','Atención y venta directa a clientes.','Facilidad de palabra y disponibilidad.'),
+J('j6','c1','Auxiliar de enfermería','Salud','San Salvador','1 año','Técnico','Apoyo al personal médico en clínica.','Título técnico y responsabilidad.'),
+J('j7','c2','Docente de informática','Educación','Soyapango','2 años o más','Universitario','Clases de computación para bachillerato.','Licenciatura afín y manejo de grupos.'),
+J('j8','c2','Contador junior','Administración','Santa Tecla','Sin experiencia','Universitario','Registro contable y reportes mensuales.','Contaduría y manejo de hojas de cálculo.')],
+apps:[{id:'a1',uid:'u0',jid:'j1',date:'1/10/2026',msg:'Tengo experiencia en soporte técnico y redes básicas.',status:'Pendiente'}],session:null,view:'home',filters:{q:'',area:'',loc:'',exp:'',nivel:''},nid:100});
+let S=null;try{S=JSON.parse(localStorage.getItem('wn-demo2')||'null')}catch(e){}
+S=S||seed();
+const save=()=>{try{localStorage.setItem('wn-demo2',JSON.stringify(S))}catch(e){}};
+const $=s=>document.querySelector(s);
+const esc=s=>String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const opts=(l,sel,ph)=>(ph?`<option value="">${ph}</option>`:'')+l.map(x=>`<option${x===sel?' selected':''}>${esc(x)}</option>`).join('');
+const co=id=>(S.companies.find(c=>c.id===id)||{name:'Empresa'}).name;
+const me=()=>S.session;
+const isU=()=>me()&&me().type==='user', isC=()=>me()&&me().type==='company';
+const applied=jid=>isU()&&S.apps.some(a=>a.uid===me().id&&a.jid===jid);
+let auth={role:'user',mode:'login'},pending=null,editId=null,openApps=new Set(),tt;
+function toast(m){const t=$('#toast');t.textContent=m;t.classList.add('on');clearTimeout(tt);tt=setTimeout(()=>t.classList.remove('on'),2600)}
+
+function closeModal(){$('#modal').hidden=true}
+
+function nav(){const v=S.view,b=(id,t)=>`<button class="nb${v===id?' on':''}" data-act="go" data-id="${id}">${t}</button>`;
+ let h=b('home','Inicio')+b('jobs','Plazas')+b('about','Proyecto');
+ if(isU())h+=b('profile','Mi perfil');if(isC()){const n=S.apps.filter(a=>(a.status||'Pendiente')==='Pendiente'&&S.jobs.some(j=>j.id===a.jid&&j.cid===me().id)).length;h+=b('panel','Panel de empresa'+(n?' ('+n+')':''))}
+ h+=me()?`<span style="color:var(--mute);padding:0 8px">${esc(me().name)}</span><button class="btn ghost sm" data-act="logout">Salir</button>`:`<button class="btn sm" data-act="auth" data-id="user">Ingresar</button>`;
+ $('#nav').innerHTML=h}
+function render(keep){nav();const v=S.view;$('#app').innerHTML=v==='about'?aboutV():v==='jobs'?jobsV():v==='profile'?profileV():v==='panel'?panelV():homeV();if(v==='jobs')list();if(!keep)window.scrollTo(0,0)}
+
+function homeHero(){return `<div class="hero"><div class="wrap"><div><h1>Uniendo personas y empresas hacia el éxito laboral.</h1><p>Busca plazas por área, ubicación, experiencia y nivel académico, o publica las de tu empresa en un solo lugar.</p>
+<form class="qs" data-form="quick"><input id="qq" placeholder="Puesto o palabra clave" aria-label="Buscar plazas"><button class="btn">Buscar plazas</button></form>
+<div class="row"><button class="btn ghost" data-act="auth" data-id="user">Crear cuenta de candidato</button><button class="btn ghost" data-act="auth" data-id="company">Registrar mi empresa</button></div>
+<div class="demo"><p>¿Quieres probarlo ya? Entra con una cuenta de demostración:</p><div class="row"><button class="btn sm" data-act="demo" data-id="user">Entrar como candidato</button><button class="btn sm" data-act="demo" data-id="company">Entrar como empresa</button></div></div></div>
+<div class="big"><img src="${LOGO}" alt="Logo WorkNet"></div></div></div>`}
+
+function jobsV(){const f=S.filters;return `<div class="wrap"><h2>Plazas disponibles</h2><div class="filters"><input data-f="q" value="${esc(f.q)}" placeholder="Buscar por puesto o palabra clave" aria-label="Palabra clave">
+<select data-f="area" aria-label="Área laboral">${opts(AREAS,f.area,'Área laboral')}</select><select data-f="loc" aria-label="Ubicación">${opts(LOCS,f.loc,'Ubicación')}</select><select data-f="exp" aria-label="Experiencia">${opts(EXPS,f.exp,'Experiencia')}</select><select data-f="nivel" aria-label="Nivel académico">${opts(NIVS,f.nivel,'Nivel académico')}</select><select data-f="sort" aria-label="Ordenar por">${[['recent','Más recientes'],['az','Nombre A–Z'],['pop','Más postulaciones']].map(([v,t])=>`<option value="${v}"${(f.sort||'recent')===v?' selected':''}>${t}</option>`).join('')}</select><button class="btn mute" data-act="clear">Limpiar</button></div>
+<div class="cnt" id="cnt"></div><div id="list"></div></div>`}
+
+
+function panelV(){if(!isC())return gate('Inicia sesión como empresa para publicar y gestionar plazas.','company');
+ const e=S.jobs.find(j=>j.id===editId)||{},mine=S.jobs.filter(j=>j.cid===me().id);
+ return `<div class="wrap"><h2>Panel de empresa</h2><div class="stats">${[['Plazas publicadas',mine.length],['Plazas activas',mine.filter(j=>j.on!==false).length],['Postulaciones',S.apps.filter(a=>mine.some(j=>j.id===a.jid)).length],['Preseleccionados',S.apps.filter(a=>a.status==='Preseleccionado'&&mine.some(j=>j.id===a.jid)).length]].map(([t,n])=>`<div class="card"><b>${n}</b><span>${t}</span></div>`).join('')}</div><div class="two"><form class="card" data-form="job"><h3>${editId?'Modificar plaza':'Publicar nueva plaza'}</h3>
+<label>Nombre del puesto<input name="title" required value="${esc(e.title)}"></label><label>Área laboral<select name="area" required>${opts(AREAS,e.area,'Selecciona')}</select></label><label>Ubicación<select name="loc" required>${opts(LOCS,e.loc,'Selecciona')}</select></label>
+<label>Experiencia<select name="exp" required>${opts(EXPS,e.exp,'Selecciona')}</select></label><label>Nivel académico<select name="nivel" required>${opts(NIVS,e.nivel,'Selecciona')}</select></label>
+<label>Descripción<textarea name="desc" required>${esc(e.desc)}</textarea></label><label>Requisitos<textarea name="req" required>${esc(e.req)}</textarea></label>
+<div class="row"><button class="btn">${editId?'Guardar cambios':'Publicar plaza'}</button>${editId?'<button type="button" class="btn mute" data-act="canceledit">Cancelar</button>':''}</div></form>
+<div class="card"><h3>Mis plazas publicadas (${mine.length})</h3>${mine.length?mine.map(j=>{const a=S.apps.filter(x=>x.jid===j.id);return `<div class="ap"><div class="i"><b>${esc(j.title)}</b>${j.on===false?' <span class="tag st">Pausada</span>':''}<small>${esc(j.area)} · ${esc(j.loc)} · ${a.length} postulaciones</small></div><button class="btn ghost sm" data-act="applicants" data-id="${j.id}">Postulantes</button><button class="btn ghost sm" data-act="toggle" data-id="${j.id}">${j.on===false?'Activar':'Pausar'}</button><button class="btn ghost sm" data-act="edit" data-id="${j.id}">Modificar</button><button class="btn mute sm" data-act="del" data-id="${j.id}">Eliminar</button>${openApps.has(j.id)?`<div class="aps">${a.length?a.map(x=>{const u=S.users.find(u=>u.id===x.uid)||{},p=u.profile||{};return `<div class="cand"><div><b>${esc(u.name)}</b><small>${esc([p.nivel,p.exp,p.area].filter(Boolean).join(' · ')||'Perfil sin completar')}</small>${x.msg?`<small>“${esc(x.msg)}”</small>`:''}</div><select data-st="${x.id}" aria-label="Estado de la postulación">${opts(STATUS,x.status||'Pendiente')}</select></div>`}).join(''):'<small>Todavía no hay postulantes.</small>'}</div>`:''}</div>`}).join(''):'<p class="sm">Todavía no has publicado plazas.</p>'}</div></div></div>`}
+function gate(t,role){return `<div class="wrap"><div class="empty">${t}<br><br><button class="btn" data-act="auth" data-id="${role}">Ingresar</button></div></div>`}
+
+function authH(){const r=auth.role,l=auth.mode==='login';return `<h3>${l?'Ingresar':'Crear cuenta'}</h3><div class="seg"><button data-act="role" data-id="user" class="${r==='user'?'on':''}">Busco empleo</button><button data-act="role" data-id="company" class="${r==='company'?'on':''}">Soy empresa</button></div>
+<form data-form="auth">${l?'':`<label>${r==='user'?'Nombre completo':'Nombre de la empresa'}<input name="name" required></label>`}<label>Correo<input name="email" type="email" required></label><label>Contraseña (mínimo 4 caracteres)<input name="pass" type="password" minlength="4" required></label><button class="btn">${l?'Ingresar':'Crear cuenta'}</button><p class="err" id="err"></p></form>
+<p class="sm"><button class="link" data-act="mode">${l?'¿No tienes cuenta? Regístrate':'¿Ya tienes cuenta? Ingresa'}</button></p><p class="sm">O prueba una cuenta de demostración: <button class="link" data-act="demo" data-id="user">candidato</button> · <button class="link" data-act="demo" data-id="company">empresa</button></p><p class="sm"><button class="link" data-act="close">Cerrar</button></p>`}
+function login(role,acc){S.session={type:role,id:acc.id,name:acc.name};closeModal();S.view=pending?'jobs':role==='user'?'profile':'panel';save();render();toast('Bienvenido, '+acc.name);if(pending){const p=pending;pending=null;doApply(p)}}
+
+const STATUS=['Pendiente','Preseleccionado','Rechazado'];
+const GAL=[['img/proceso.png','Proceso de centralización','Las ofertas dispersas se reúnen en una sola plataforma con búsqueda y filtros.'],['img/basededatos.png','Base de datos MySQL','Usuarios, empresas, plazas y postulaciones almacenados en XAMPP.'],['img/reportes.png','Reportes y estadísticas','Plazas por área, postulaciones por nivel académico y por ubicación.']];
+const myUser=()=>S.users.find(u=>u.id===me().id);
+const favs=()=>{const u=myUser();return u.favs||(u.favs=[])};
+const nApps=jid=>S.apps.filter(a=>a.jid===jid).length;
+const matches=j=>{if(!isU())return false;const p=myUser().profile||{};return (p.area===j.area)+(p.exp===j.exp)+(p.nivel===j.nivel)>=2};
+
+function modal(h,wide){$('#box').className='box'+(wide?' wide':'');$('#box').innerHTML=h;$('#modal').hidden=false;const f=$('#box input,#box textarea,#box button');f&&f.focus()}
+
+function jobCard(j){const ap=applied(j.id),fv=isU()&&favs().includes(j.id);
+ return `<div class="job"><div class="i"><b>${esc(j.title)}</b><small>${esc(co(j.cid))} · ${esc(j.loc)}</small><span class="tag">${esc(j.area)}</span><span class="tag">${esc(j.exp)}</span><span class="tag">${esc(j.nivel)}</span>${matches(j)?'<span class="tag hl">Coincide con tu perfil</span>':''}</div>
+<button class="btn mute sm" data-act="fav" data-id="${j.id}" aria-pressed="${fv}">${fv?'★ Guardada':'☆ Guardar'}</button><button class="btn ghost sm" data-act="details" data-id="${j.id}">Ver detalles</button><button class="btn sm" data-act="apply" data-id="${j.id}"${ap?' disabled':''}>${ap?'Postulado':'Postularme'}</button></div>`}
+
+function list(){const f=S.filters,q=f.q.trim().toLowerCase();
+ const r=S.jobs.filter(j=>j.on!==false&&(!q||(j.title+' '+j.desc+' '+j.area+' '+co(j.cid)).toLowerCase().includes(q))&&(!f.area||j.area===f.area)&&(!f.loc||j.loc===f.loc)&&(!f.exp||j.exp===f.exp)&&(!f.nivel||j.nivel===f.nivel));
+ r.sort(f.sort==='az'?(a,b)=>a.title.localeCompare(b.title):f.sort==='pop'?(a,b)=>nApps(b.id)-nApps(a.id):(a,b)=>(b.t||0)-(a.t||0));
+ $('#cnt').textContent=r.length+(r.length===1?' plaza encontrada':' plazas encontradas');
+ $('#list').innerHTML=r.length?r.map(jobCard).join(''):`<div class="empty">No hay plazas con esos criterios.<br><button class="link" data-act="clear">Quitar filtros</button></div>`}
+
+function homeV(){const rec=S.jobs.filter(j=>j.on!==false).sort((a,b)=>(b.t||0)-(a.t||0)).slice(0,3);
+ return homeHero()+`<div class="wrap"><h2>Plazas recientes</h2>${rec.map(jobCard).join('')}<button class="btn ghost" data-act="go" data-id="jobs">Ver todas las plazas</button></div>`}
+
+function aboutV(){return `<div class="wrap"><h2>El proyecto en imágenes</h2><div class="gal">${GAL.map((g,i)=>`<figure><button data-act="zoom" data-id="${i}" aria-label="Ampliar: ${g[1]}"><img src="${g[0]}" alt="${g[1]}"></button><figcaption><b>Anexo ${i+1}. ${g[1]}</b>${g[2]}</figcaption></figure>`).join('')}</div></div>`}
+
+function profileV(){if(!isU())return gate('Inicia sesión como candidato para ver tu perfil.','user');
+ const u=myUser(),p=u.profile||{},my=S.apps.filter(a=>a.uid===u.id),fv=favs().map(id=>S.jobs.find(j=>j.id===id)).filter(Boolean);
+ const pct=Math.round(['skills','exp','nivel','area'].filter(k=>p[k]).length/4*100);
+ return `<div class="wrap"><h2>Mi perfil</h2><div class="two"><form class="card" data-form="profile"><h3>${esc(u.name)}</h3><div class="bar" role="img" aria-label="Perfil completo al ${pct}%"><i style="width:${pct}%"></i></div><p class="sm" style="margin:6px 0 16px">Perfil completo al ${pct}%</p>
+<label>Conocimientos<textarea name="skills" placeholder="Ej.: Excel, atención al cliente">${esc(p.skills)}</textarea></label><label>Experiencia<select name="exp">${opts(EXPS,p.exp,'Selecciona')}</select></label><label>Nivel académico<select name="nivel">${opts(NIVS,p.nivel,'Selecciona')}</select></label><label>Área laboral de interés<select name="area">${opts(AREAS,p.area,'Selecciona')}</select></label>
+<div class="row"><button class="btn">Guardar perfil</button><button type="button" class="btn ghost" data-act="match">Ver plazas para mi perfil</button></div></form>
+<div><div class="card"><h3>Mis postulaciones (${my.length})</h3>${my.length?my.map(a=>{const j=S.jobs.find(x=>x.id===a.jid),s=a.status||'Pendiente';return j?`<div class="ap"><div class="i"><b>${esc(j.title)}</b><small>${esc(co(j.cid))} · ${esc(a.date)}</small></div><span class="tag st st${STATUS.indexOf(s)}">${s}</span><button class="btn mute sm" data-act="unapply" data-id="${a.jid}">Cancelar</button></div>`:''}).join(''):'<p class="sm">Aún no te has postulado. Explora las plazas y pulsa «Postularme».</p>'}</div>
+<div class="card" style="margin-top:20px"><h3>Plazas guardadas (${fv.length})</h3>${fv.length?fv.map(j=>`<div class="ap"><div class="i"><b>${esc(j.title)}</b><small>${esc(co(j.cid))} · ${esc(j.loc)}</small></div><button class="btn ghost sm" data-act="details" data-id="${j.id}">Ver detalles</button><button class="btn mute sm" data-act="fav" data-id="${j.id}">Quitar</button></div>`).join(''):'<p class="sm">Pulsa «Guardar» en una plaza para verla aquí.</p>'}</div></div></div></div>`}
+
+function doApply(jid){if(!isU()){pending=jid;auth.role='user';return modal(authH())}
+ if(applied(jid))return;const j=S.jobs.find(x=>x.id===jid);
+ modal(`<h3>Postularme a ${esc(j.title)}</h3><p class="sm" style="margin:0 0 12px">${esc(co(j.cid))} · ${esc(j.loc)}</p><form data-form="apply"><input type="hidden" name="jid" value="${jid}"><label>Mensaje para la empresa (opcional)<textarea name="msg" maxlength="300" placeholder="Cuéntales por qué eres buena opción"></textarea></label><div class="row"><button class="btn">Enviar postulación</button><button type="button" class="btn mute" data-act="close">Cancelar</button></div></form>`)}
+
+const act={
+ go:id=>{S.view=id;editId=null;render()},
+ auth:id=>{auth={role:id,mode:'login'};modal(authH())},
+ role:id=>{auth.role=id;modal(authH())},mode:()=>{auth.mode=auth.mode==='login'?'register':'login';modal(authH())},close:closeModal,
+ demo:id=>login(id,id==='user'?S.users[0]:S.companies[0]),
+ logout:()=>{S.session=null;S.view='home';editId=null;save();render();toast('Sesión cerrada')},
+ clear:()=>{S.filters={q:'',area:'',loc:'',exp:'',nivel:''};save();render()},
+ details:id=>{const j=S.jobs.find(x=>x.id===id);modal(`<h3>${esc(j.title)}</h3><p class="sm" style="margin:0 0 8px">${esc(co(j.cid))} · ${esc(j.loc)}</p><span class="tag">${esc(j.area)}</span><span class="tag">${esc(j.exp)}</span><span class="tag">${esc(j.nivel)}</span><p><b style="color:#fff">Descripción</b><br>${esc(j.desc)}</p><p><b style="color:#fff">Requisitos</b><br>${esc(j.req)}</p><div class="row"><button class="btn"${applied(id)?' disabled':''} data-act="apply" data-id="${id}">${applied(id)?'Postulado':'Postularme'}</button><button class="btn mute" data-act="close">Cerrar</button></div>`)},
+ apply:id=>{if(isC())return toast('Entra como candidato para postularte');doApply(id)},
+ unapply:id=>{S.apps=S.apps.filter(a=>!(a.uid===me().id&&a.jid===id));save();render();toast('Postulación cancelada')},
+ match:()=>{const p=S.users.find(x=>x.id===me().id).profile||{};S.filters={q:'',area:p.area||'',loc:'',exp:p.exp||'',nivel:p.nivel||''};S.view='jobs';save();render()},
+ edit:id=>{editId=id;render()},canceledit:()=>{editId=null;render()},
+ applicants:id=>{openApps.has(id)?openApps.delete(id):openApps.add(id);render(1)},
+ del:id=>{const j=S.jobs.find(x=>x.id===id);modal(`<h3>Eliminar plaza</h3><p>¿Eliminar «${esc(j.title)}»? Se quitarán también sus postulaciones.</p><div class="row"><button class="btn" data-act="delok" data-id="${id}">Sí, eliminar</button><button class="btn mute" data-act="close">Cancelar</button></div>`)},
+ delok:id=>{S.jobs=S.jobs.filter(j=>j.id!==id);S.apps=S.apps.filter(a=>a.jid!==id);save();closeModal();render();toast('Plaza eliminada')},
+ fav:id=>{if(isC())return toast('Las empresas no pueden guardar plazas');if(!isU()){auth={role:'user',mode:'login'};return modal(authH())}const f=favs(),i=f.indexOf(id);i<0?f.push(id):f.splice(i,1);save();S.view==='jobs'?list():render(1);toast(i<0?'Plaza guardada':'Plaza quitada de guardadas')},
+ toggle:id=>{const j=S.jobs.find(x=>x.id===id);j.on=j.on===false;save();render(1);toast(j.on?'Plaza activada':'Plaza pausada')},
+ zoom:id=>{const g=GAL[id];modal(`<img class="zimg" src="${g[0]}" alt="${g[1]}"><p class="sm" style="margin:0 0 12px"><b style="color:#fff">${g[1]}</b> · ${g[2]}</p><button class="btn mute" data-act="close">Cerrar</button>`,1)},
+ reset:()=>{S=seed();save();editId=null;closeModal();render();toast('Demo restablecida')}
+};
+document.addEventListener('click',e=>{const t=e.target.closest('[data-act]');if(t&&act[t.dataset.act])act[t.dataset.act](t.dataset.id);else if(e.target.id==='modal')closeModal()});
+document.addEventListener('keydown',e=>{if(e.key==='Escape')closeModal()});
+document.addEventListener('input',e=>{const k=e.target.dataset.f;if(k){S.filters[k]=e.target.value;save();list()}});
+document.addEventListener('change',e=>{const k=e.target.dataset.f,st=e.target.dataset.st;if(k){S.filters[k]=e.target.value;save();list()}if(st){S.apps.find(a=>a.id===st).status=e.target.value;save();render(1);toast('Estado: '+e.target.value)}});
+document.addEventListener('submit',e=>{e.preventDefault();const F=e.target,k=F.dataset.form,d=Object.fromEntries(new FormData(F));
+ if(k==='quick'){S.filters={q:d.qq||$('#qq').value,area:'',loc:'',exp:'',nivel:''};S.view='jobs';save();render()}
+ if(k==='auth'){const role=auth.role,L=role==='user'?S.users:S.companies,em=d.email.trim().toLowerCase(),err=$('#err');
+  if(auth.mode==='login'){const a=L.find(x=>x.email===em&&x.pass===d.pass);a?login(role,a):err.textContent='Correo o contraseña incorrectos.'}
+  else if(L.some(x=>x.email===em))err.textContent='Ese correo ya está registrado.';
+  else{const a={id:(role==='user'?'u':'c')+S.nid++,name:d.name.trim(),email:em,pass:d.pass};if(role==='user'){a.profile={};a.favs=[]}L.push(a);login(role,a)}}
+ if(k==='profile'){S.users.find(x=>x.id===me().id).profile={skills:d.skills,exp:d.exp,nivel:d.nivel,area:d.area};save();render();toast('Perfil guardado')}
+ if(k==='apply'){S.apps.push({id:'a'+S.nid++,uid:me().id,jid:d.jid,date:new Date().toLocaleDateString('es'),msg:d.msg.trim(),status:'Pendiente'});save();closeModal();S.view==='jobs'?list():render(1);toast('Postulación enviada')}
+ if(k==='job'){if(editId){Object.assign(S.jobs.find(j=>j.id===editId),d);toast('Plaza actualizada')}else{S.jobs.unshift({id:'j'+S.nid++,cid:me().id,t:Date.now(),on:true,...d});toast('Plaza publicada')}editId=null;save();render()}
+});
+$('#hl').src=LOGO;render();
+</script>
+</body>
+</html>
