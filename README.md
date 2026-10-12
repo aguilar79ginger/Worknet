@@ -1,0 +1,13 @@
+# WorkNet
+
+Plataforma de reclutamiento web desarrollada con WordPress, PHP, MySQL y XAMPP.
+
+## Requisitos
+* XAMPP (Apache y MySQL activos).
+* Instalación de WordPress.
+
+## Instrucciones de Instalación Local
+1. Descarga o clona este repositorio dentro de tu carpeta `htdocs` de XAMPP.
+2. Copia el contenido de la carpeta `wp-content` en tu instalación de WordPress.
+3. Importa el archivo `base-de-datos.sql` en phpMyAdmin.
+4. Configura la conexión a la base de datos en tu archivo `wp-config.php`.
